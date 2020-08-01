@@ -19,8 +19,8 @@ Six young health participants were asked to perform one set of 10 repetitions of
 Create prediction models incorporating various measurements/data from personal activity devices to predict performance in doing Unilateral Dumbbell Biceps Curls.
 
 ## Loading Library
+Loading required libraries.
 ```{r message=FALSE, warning=FALSE, results=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
 library(caret)
 library(dplyr)
 library(parallel)
@@ -30,6 +30,7 @@ library(ggplot2)
 ```
 
 ## Loading Data Sets
+Loading datasets and setting up factors.
 ```{r}
 pml_train <- read.csv("pml-training.csv", na.strings=c("","NA"))
 pml_test <- read.csv("pml-testing.csv", na.strings=c("","NA"))
@@ -42,6 +43,7 @@ str(pml_train)
 
 ```
 ## Data Cleaning and Slicing
+Cleaning up data - Removing empty variables ("" or "NA), variables with near zero variance.
 ```{r}
 pml_train_clean <- select(pml_train, -c(X, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
 NZV <- nearZeroVar(pml_train_clean)
@@ -100,9 +102,10 @@ registerDoSEQ()
 ```
 
 ## Summarise Prediction Models
+Summary of Prediction Models in terms of Accuracy and Kappa statistic.
 ```{r}
 modelSummary <- data.frame(Model =c("Decision Tree", "Random Forest", "Gradient Boosting"), Accuracy = c(confMatrixDT$overall[1], confMatrixRF$overall[1], confMatrixGBM$overall[1]), Kappa = c(confMatrixDT$overall[2], confMatrixRF$overall[2], confMatrixGBM$overall[2]))
-
+modelSummary
 ggplot(data = modelSummary, aes(x = Kappa, y = Accuracy, colour = Model)) +
   geom_point() +
   xlim(0, 1) + ylim (0, 1) +
@@ -110,7 +113,7 @@ ggplot(data = modelSummary, aes(x = Kappa, y = Accuracy, colour = Model)) +
 ```
 
 ## Apply Best Model to Test Data
-Using the random forest model as it offers the highest accuracy and kappa statistic for prediction.
+Using the Random Forest model as it offers the best Accuracy and Kappa statistic.
 ```{r}
 predictTest <- predict(modFitRF, newdata=pml_test)
 predictTest
