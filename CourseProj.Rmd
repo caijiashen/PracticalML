@@ -1,0 +1,118 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Cai Jiashen"
+date: "8/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Practical Machine Learning Course Project
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+## Task
+Create prediction models incorporating various measurements/data from personal activity devices to predict performance in doing Unilateral Dumbbell Biceps Curls.
+
+## Loading Library
+```{r message=FALSE, warning=FALSE, results=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+library(caret)
+library(dplyr)
+library(parallel)
+library(doParallel)
+library(rattle)
+library(ggplot2)
+```
+
+## Loading Data Sets
+```{r}
+pml_train <- read.csv("pml-training.csv", na.strings=c("","NA"))
+pml_test <- read.csv("pml-testing.csv", na.strings=c("","NA"))
+
+pml_train$user_name <- factor(pml_train$user_name)
+pml_test$user_name <- factor(pml_test$user_name)
+pml_train$classe <- factor(pml_train$classe)
+
+str(pml_train)
+
+```
+## Data Cleaning and Slicing
+```{r}
+pml_train_clean <- select(pml_train, -c(X, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
+NZV <- nearZeroVar(pml_train_clean)
+pml_train_clean <- pml_train_clean[,-NZV]
+pml_train_clean <- pml_train_clean[,colSums(is.na(pml_train_clean)) == 0]
+
+str(pml_train_clean)
+
+inTrain <- createDataPartition(pml_train_clean$classe, p = 0.7, list = FALSE)
+trainSet <- pml_train_clean[inTrain,]
+testSet <- pml_train_clean[-inTrain,]
+```
+
+## Prediction Model
+### Setup Parallel Computing
+```{r}
+cluster <- makeCluster(detectCores() - 1, setup_timeout = 0.5) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+fitControl <- trainControl(method = "cv", number = 3, allowParallel = TRUE, verboseIter = TRUE)
+```
+
+### Decision Tree Model
+```{r}
+set.seed(2020)
+modFitDT <- train(classe ~ ., data=trainSet, method="rpart", trControl=fitControl)
+modFitDT
+fancyRpartPlot(modFitDT$finalModel)
+
+predictDT <- predict(modFitDT, newdata = testSet)
+confMatrixDT <- confusionMatrix(predictDT, testSet$classe)
+```
+
+### Random Forest Model
+```{r}
+set.seed(2020)
+modFitRF <- train(classe ~ ., data=trainSet, method="rf", trControl=fitControl)
+modFitRF
+
+predictRF <- predict(modFitRF, newdata = testSet)
+confMatrixRF <- confusionMatrix(predictRF, testSet$classe)
+```
+
+### Gradient Boosted Model
+```{r}
+set.seed(2020)
+modFitGBM <- train(classe ~ ., data=trainSet, method="gbm", trControl=fitControl, verbose = FALSE)
+modFitGBM
+
+predictGBM <- predict(modFitGBM, newdata = testSet)
+confMatrixGBM <- confusionMatrix(predictGBM, testSet$classe)
+```
+### Stop Parallel Computing
+```{r}
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+## Summarise Prediction Models
+```{r}
+modelSummary <- data.frame(Model =c("Decision Tree", "Random Forest", "Gradient Boosting"), Accuracy = c(confMatrixDT$overall[1], confMatrixRF$overall[1], confMatrixGBM$overall[1]), Kappa = c(confMatrixDT$overall[2], confMatrixRF$overall[2], confMatrixGBM$overall[2]))
+
+ggplot(data = modelSummary, aes(x = Kappa, y = Accuracy, colour = Model)) +
+  geom_point() +
+  xlim(0, 1) + ylim (0, 1) +
+  ggtitle("Accuracy and Kappa of Prediction Models")
+```
+
+## Apply Best Model to Test Data
+Using the random forest model as it offers the highest accuracy and kappa statistic for prediction.
+```{r}
+predictTest <- predict(modFitRF, newdata=pml_test)
+predictTest
+
+```
